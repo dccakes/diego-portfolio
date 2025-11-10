@@ -1,0 +1,239 @@
+---
+title: "AWS US-EAST-1 Outage: A Deep Dive into Cascading Failures and Architectural Coupling"
+summary: "Analyzing the 14.5-hour AWS outage, cascading failures, and architectural coupling issues that turned a 3-hour DynamoDB incident into a region-wide catastrophe."
+image: "/images/gallery/blog-aws-outage-cover.png"
+publishedAt: "2025-10-22"
+tag: "Cloud Architecture"
+---
+
+## Introduction
+
+On October 19-20, 2025, Amazon Web Services experienced one of its most significant outages in recent memory—a 14.5-hour disruption that affected countless services across the Northern Virginia (us-east-1) region. AWS just released their comprehensive incident report, and it's a masterclass in how modern distributed systems fail.
+
+If you're a CTO, engineering leader, or architect, this report should be required reading. Not because of what broke, but because of *how* it broke—and what it reveals about hidden architectural risks in any large-scale system.
+
+## The Timeline: Three Hours That Became Fourteen
+
+Here's the paradox that makes this incident so instructive:
+
+- **DynamoDB DNS issue**: 11:48 PM (Oct 19) - 2:40 AM (Oct 20) = ~3 hours
+- **Full regional recovery**: 11:48 PM (Oct 19) - 2:20 PM (Oct 20) = ~14.5 hours
+
+DynamoDB recovered in three hours. So why did the outage last nearly fifteen?
+
+The answer reveals everything wrong—and right—about how we build distributed systems.
+
+## What Actually Happened: The Technical Breakdown
+
+### The Trigger: A Latent Race Condition
+
+The root cause was a race condition in DynamoDB's DNS management system that had existed for years, waiting for exactly the wrong timing to manifest.
+
+DynamoDB manages hundreds of thousands of DNS records to operate its massive fleet of load balancers. The system is split into two independent components for resilience:
+
+1. **DNS Planner**: Monitors health and capacity, creates DNS plans listing which load balancers should receive traffic
+2. **DNS Enactor**: Applies these plans to Route53, running independently in three Availability Zones
+
+The race condition involved an unlikely interaction between two DNS Enactors:
+
+1. Enactor A picked up an older plan and started applying it, but experienced unusual delays
+2. Meanwhile, the DNS Planner continued generating newer plans
+3. Enactor B picked up a newer plan and rapidly applied it across all endpoints
+4. Enactor B then invoked cleanup, which deletes plans significantly older than the current one
+5. At exactly the wrong moment, Enactor A (still working on the old plan) overwrote the new plan on the regional DynamoDB endpoint
+6. Enactor B's cleanup process then deleted this "old" plan—which was now the active plan
+7. **Result**: Zero IP addresses for `dynamodb.us-east-1.amazonaws.com`
+
+The system had safeguards—checks to ensure plans weren't stale before applying them. But the check itself became stale during the unusually long processing delays.
+
+### The Cascade: When Dependencies Become Dominoes
+
+When DynamoDB's DNS records disappeared at 11:48 PM, the cascade began immediately:
+
+#### Layer 1: Direct DynamoDB Dependencies (11:48 PM - 2:40 AM)
+
+All systems needing to connect to DynamoDB via the public endpoint experienced immediate DNS failures. This included customer traffic and internal AWS services. Customers with DynamoDB global tables could connect to replicas in other regions but experienced replication lag to/from us-east-1.
+
+#### Layer 2: EC2 Instance Launches (11:48 PM - Oct 20, 1:50 PM)
+
+EC2's DropletWorkflow Manager (DWFM) uses DynamoDB to maintain leases with physical servers (called "droplets"). Every few minutes, DWFM hosts perform state checks with their droplets to ensure proper tracking.
+
+When DynamoDB became unreachable, these state checks failed. While running instances remained healthy, leases slowly began timing out across the fleet. Any droplet without an active lease isn't eligible for new instance launches.
+
+Here's where it gets interesting: When DynamoDB recovered at 2:25 AM, DWFM tried to re-establish leases with hundreds of thousands of droplets **simultaneously**. The work took longer than the lease timeout period. New work was queued to retry failed attempts. More work timed out. More retries were queued.
+
+**DWFM entered congestive collapse.**
+
+The system designed for resilience couldn't make forward progress because the recovery operation itself was the bottleneck. Engineers had to carefully throttle incoming work and selectively restart DWFM hosts to clear the queues. By 5:28 AM, leases were re-established and launches began succeeding—but with "request limit exceeded" errors due to the protective throttling.
+
+#### Layer 3: Network State Propagation (5:28 AM - 10:36 AM)
+
+When new EC2 instances launch, Network Manager propagates configuration allowing them to communicate within their VPC and reach the internet. The DWFM delays created a massive backlog of network state changes.
+
+Starting at 6:21 AM, Network Manager experienced increased latencies processing this backlog. New instances could launch successfully but lacked network connectivity—they were technically running but functionally useless.
+
+#### Layer 4: Network Load Balancer Health Checks (5:30 AM - 2:09 PM)
+
+NLB's health check subsystem began bringing new EC2 instances into service while their network state hadn't fully propagated. Health checks would fail even though the underlying NLB nodes and backend targets were healthy.
+
+This created an oscillation: health checks failed → nodes removed from DNS → network state propagated → health checks succeeded → nodes added back → repeat.
+
+The oscillation increased load on the health check subsystem, causing it to degrade and trigger automatic AZ DNS failover. For multi-AZ load balancers, this removed healthy capacity. Applications experienced connection errors if remaining capacity couldn't handle the load.
+
+Engineers disabled automatic failover at 9:36 AM, bringing healthy capacity back into service.
+
+### The Ripple Effects
+
+- **Lambda**: Initial DynamoDB issues prevented function creation/updates. Later, NLB failures triggered instance terminations, leaving systems under-scaled. Engineers had to throttle event source mappings and async invocations to prioritize synchronous calls.
+- **ECS/EKS/Fargate**: Container launch failures and cluster scaling delays throughout the event due to EC2 launch issues.
+- **Amazon Connect**: Elevated errors handling calls, chats, and cases. Inbound callers got busy tones or dead air. Agents couldn't sign in.
+- **STS**: API errors and latency, recovering initially at 1:19 AM but experiencing secondary impact from NLB issues.
+- **IAM/Console Login**: Authentication failures for IAM users. Root users and federated identity users in all regions experienced errors when trying to access regions outside us-east-1.
+- **Redshift**: Query processing relied on DynamoDB endpoints. Even after recovery, some clusters remained impaired because workflows to replace EC2 instances with expired credentials were blocked. Worse: Redshift's architectural decision to use us-east-1 IAM APIs for user group resolution meant users globally couldn't execute queries with IAM credentials.
+
+## The Hidden Architecture Problem
+
+This wasn't a DynamoDB outage. It was an **architectural coupling failure**.
+
+Every service had transitive dependencies that weren't immediately obvious:
+
+**Lambda → NLB → EC2 → DWFM → DynamoDB**
+
+When one link failed, the entire chain collapsed. But the real problem was deeper:
+
+### 1. Recovery Operations Weren't Tested at Scale
+
+DWFM's recovery procedures worked fine in isolated tests. But they'd never been tested for cold-starting the entire fleet simultaneously. The recovery operation itself became the failure mode.
+
+This is a critical lesson: **Your disaster recovery procedures need validation at production scale, not just in test environments.**
+
+### 2. Health Checks Lacked Context Awareness
+
+NLB health checks couldn't distinguish between:
+
+- "This node is unhealthy" (remove it!)
+- "This node just launched and network state is propagating" (wait!)
+
+Binary health checks without temporal context made the problem worse by thrashing healthy capacity in and out of service.
+
+### 3. Cross-Region Dependencies Created Global Blast Radius
+
+Redshift's decision to centralize IAM user group resolution in us-east-1 meant a regional outage became a global authentication failure. This is the danger of centralizing logic "for efficiency" without considering failure domain isolation.
+
+### 4. Congestive Collapse Had No Established Procedure
+
+When DWFM entered congestive collapse, there was no playbook. Engineers had to carefully experiment with mitigation steps, knowing that mistakes could make things worse. The lack of established recovery procedures for this failure mode extended the outage significantly.
+
+## What AWS Is Fixing
+
+AWS's remediation plan addresses the specific technical failures:
+
+- Fix the DNS race condition and add protections against incorrect plan application
+- Add velocity controls to NLB limiting how fast capacity can be removed during failover
+- Build additional test suites exercising DWFM recovery workflows at scale
+- Improve throttling mechanisms in data propagation systems based on queue depth
+
+These are solid fixes. But the deeper lessons go beyond AWS's specific implementation.
+
+## Lessons for Your Architecture
+
+### 1. Map Your Transitive Dependencies
+
+You likely know your direct dependencies. Do you know your transitive ones?
+
+If your authentication service goes down, what breaks? If your primary database becomes unreachable, which services can still function?
+
+**Create a dependency graph. Trace each critical path. Identify single points of failure.** The dependencies you don't know about are the ones that will bite you.
+
+### 2. Design for Graceful Degradation
+
+When a dependency fails, does your entire service go down? Or can you still provide value with reduced functionality?
+
+At Pickle, we're designing our candidate search to work even if enrichment APIs are unavailable—show basic licensing data and flag that additional details are being retrieved. The search experience degrades but doesn't fail completely.
+
+### 3. Test Recovery at Production Scale
+
+Your recovery procedures might work perfectly in staging. Do they work when recovering your entire production fleet simultaneously?
+
+Consider:
+
+- Can your systems handle the thundering herd of recovery operations?
+- Do recovery operations complete before timeouts fire?
+- Are there feedback loops where recovery attempts make things worse?
+
+### 4. Build Observability That Shows "Why"
+
+When something breaks, you need to know:
+
+- Which dependency failed?
+- Was it a transient issue or permanent failure?
+- Should we retry or fail fast?
+
+At Pickle, our refactored enrichment pipeline tracks pass/fail states for each API provider per contact. When enrichment fails, we know exactly which provider failed and why—allowing us to route around problems or degrade gracefully.
+
+### 5. Consider Failure Domain Isolation
+
+Be very careful about cross-region or cross-availability-zone dependencies. Every shared component is a potential single point of failure.
+
+Ask yourself: "If region A goes down, why would region B be affected?" If you have a good answer, document it and understand the tradeoffs. If you don't have a good answer, you've found a hidden risk.
+
+### 6. Make Health Checks Smarter
+
+Binary health checks (healthy/unhealthy) aren't sufficient for complex distributed systems. Consider:
+
+- Transient vs. permanent failures
+- Propagation delays for state changes
+- Differentiation between "starting up" and "broken"
+- Rate limiting for removal of capacity
+
+## The Startup Perspective
+
+You're probably thinking: "This is AWS-scale stuff. We're a pre-seed startup with 8 customers. Does this apply to us?"
+
+**Yes. Absolutely.**
+
+You can't afford AWS-level redundancy. But you CAN:
+
+**Understand your critical path.** What happens if your licensing data provider goes down? If your enrichment APIs are unavailable? If your database becomes unreachable? Map these scenarios now, while your system is still comprehensible.
+
+**Design degradation modes early.** It's much easier to build graceful degradation into your initial architecture than to retrofit it later. When you're deciding how to structure your candidate search, ask: "What's the minimum viable experience if X fails?"
+
+**Build observability from day one.** You need to know WHY things failed, not just that they failed. This is cheaper and easier to implement early than to add later when you're fighting fires.
+
+**Document architectural decisions.** When you make a tradeoff (like centralizing certain logic for efficiency), document why and what the failure modes are. Future you—or your future team—will thank you.
+
+**Test your recovery procedures.** Even at small scale, practice recovering from failures. How long does it take to restore from backup? Can you switch to a fallback provider? Do you know?
+
+## The Bottom Line
+
+AWS built a system with:
+
+- Independent components for resilience
+- Multiple layers of health checks
+- Automatic failover mechanisms
+- Careful capacity management
+
+It all failed because of:
+
+- A rare race condition
+- Hidden transitive dependencies
+- Recovery procedures that didn't scale
+- Health checks without temporal awareness
+- Cross-region coupling that amplified blast radius
+
+**If it can happen to AWS, it can happen to you.**
+
+The question isn't "will my system fail?" It's "do I know what breaks when it does?"
+
+That difference—between understanding your failure modes and being surprised by them—is what separates a 3-hour incident from a 14-hour catastrophe.
+
+---
+
+## Further Reading
+
+- [Full AWS Incident Report](https://aws.amazon.com/message/11201/)
+- [Building Static Stability](https://aws.amazon.com/builders-library/static-stability-using-availability-zones/)
+- [Netflix Chaos Engineering](https://netflix.github.io/chaosmonkey/)
+- [Google SRE Book: Cascading Failures](https://sre.google/sre-book/addressing-cascading-failures/)
+
+*Have you experienced cascading failures in your architecture? I'd love to hear your stories and lessons learned. Connect with me on [LinkedIn](https://www.linkedin.com/in/diego-carvallo/).*

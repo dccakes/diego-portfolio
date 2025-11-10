@@ -1,19 +1,19 @@
 import { About, Blog, Gallery, Home, Newsletter, Person, Social, Work } from "@/types";
-import { Line, Logo, Row, Text } from "@once-ui-system/core";
+import { Line, Row, Text } from "@once-ui-system/core";
 
 const person: Person = {
-  firstName: "Selene",
-  lastName: "Yu",
-  name: `Selene Yu`,
-  role: "Design Engineer",
+  firstName: "Diego",
+  lastName: "Carvallo",
+  name: `Diego Carvallo`,
+  role: "CTO & Co-Founder",
   avatar: "/images/avatar.jpg",
-  email: "example@gmail.com",
-  location: "Asia/Jakarta", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
-  languages: ["English", "Bahasa"], // optional: Leave the array empty if you don't want to display languages
+  email: "diego@carvallo.io",
+  location: "Europe/London", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
+  languages: ["English", "Spanish", "French"], // optional: Leave the array empty if you don't want to display languages
 };
 
 const newsletter: Newsletter = {
-  display: true,
+  display: false,
   title: <>Subscribe to {person.firstName}'s Newsletter</>,
   description: <>My weekly newsletter about creativity and engineering</>,
 };
@@ -24,17 +24,12 @@ const social: Social = [
   {
     name: "GitHub",
     icon: "github",
-    link: "https://github.com/once-ui-system",
+    link: "https://github.com/dccakes",
   },
   {
     name: "LinkedIn",
     icon: "linkedin",
-    link: "https://www.linkedin.com/company/once-ui/",
-  },
-  {
-    name: "Threads",
-    icon: "threads",
-    link: "https://www.threads.com/@once_ui",
+    link: "https://www.linkedin.com/in/diego-carvallo/",
   },
   {
     name: "Email",
@@ -45,7 +40,7 @@ const social: Social = [
 
 const home: Home = {
   path: "/",
-  image: "/images/og/home.jpg",
+  image: "/images/og/home.png",
   label: "Home",
   title: `${person.name}'s Portfolio`,
   description: `Portfolio website showcasing my work as a ${person.role}`,
@@ -54,25 +49,20 @@ const home: Home = {
     display: true,
     title: (
       <Row gap="12" vertical="center">
-        <strong className="ml-4">Once UI</strong>{" "}
+        <strong className="ml-4">Pickle</strong>{" "}
         <Line background="brand-alpha-strong" vert height="20" />
         <Text marginRight="4" onBackground="brand-medium">
-          Featured work
+          Visit Pickle
         </Text>
       </Row>
     ),
-    href: "/work/building-once-ui-a-customizable-design-system",
+    href: "https://www.withpickle.com",
   },
   subline: (
     <>
-      I'm Selene, a design engineer at{" "}
-      <Logo
-        dark
-        icon="/trademarks/wordmark-dark.svg"
-        style={{ display: "inline-flex", top: "0.25em", marginLeft: "-0.25em" }}
-      />
-      , where I craft intuitive
-      <br /> user experiences. After hours, I build my own projects.
+      I'm a Technical Leader bridging complex systems with business outcomes. As CTO and co-founder at{" "}
+      <strong>Pickle</strong>, I'm building healthcare-focused recruitment tools.
+      <br /> I specialize in enterprise architecture, data platforms, and AI implementation.
     </>
   ),
 };
@@ -91,16 +81,14 @@ const about: About = {
   },
   calendar: {
     display: true,
-    link: "https://cal.com",
+    link: "https://cal.com/diego-carvallo-cks2rp/30-minute-consultation",
   },
   intro: {
     display: true,
     title: "Introduction",
     description: (
       <>
-        Selene is a Jakarta-based design engineer with a passion for transforming complex challenges
-        into simple, elegant design solutions. Her work spans digital interfaces, interactive
-        experiences, and the convergence of design and technology.
+        Diego is a CTO, Enterprise Architect and Data Strategist passionate about translating technical complexity into tangible business value. With experience spanning enterprise architecture, data platforms, and AI implementation, he specializes in designing systems that deliver measurable results. From architecting data platforms powering £9M products to leading enterprise digital transformations for global financial institutions, Diego bridges complex technical systems with strategic business outcomes.
       </>
     ),
   },
@@ -109,41 +97,63 @@ const about: About = {
     title: "Work Experience",
     experiences: [
       {
-        company: "FLY",
-        timeframe: "2022 - Present",
-        role: "Senior Design Engineer",
+        company: "Pickle",
+        timeframe: "Aug 2023 - Present",
+        role: "Chief Technology Officer, Co-Founder",
         achievements: [
           <>
-            Redesigned the UI/UX for the FLY platform, resulting in a 20% increase in user
-            engagement and 30% faster load times.
+            Leading the development of a healthcare-focused recruitment platform, decreasing hiring times by over 28%.
           </>,
           <>
-            Spearheaded the integration of AI tools into design workflows, enabling designers to
-            iterate 50% faster.
+            Designed and implemented a modular, cloud-native architecture using Azure Container Apps and CI/CD pipelines ensuring scalability, security, and rapid deployment.
+          </>,
+          <>
+            Created the platform's initial architecture vision and roadmap, aligning technical design with business objectives and long-term growth targets.
           </>,
         ],
-        images: [
-          // optional: leave the array empty if you don't want to display images
-          {
-            src: "/images/projects/project-01/cover-01.jpg",
-            alt: "Once UI Project",
-            width: 16,
-            height: 9,
-          },
-        ],
+        images: [],
       },
       {
-        company: "Creativ3",
-        timeframe: "2018 - 2022",
-        role: "Lead Designer",
+        company: "Arca Blanca | Artefact UK",
+        timeframe: "Jul 2021 - Dec 2023",
+        role: "Enterprise & Data Architect",
         achievements: [
           <>
-            Developed a design system that unified the brand across multiple platforms, improving
-            design consistency by 40%.
+            Led the design and build of a new data platform to power a £9M product leveraging graph databases and Azure Cloud, leading team of 12.
           </>,
           <>
-            Led a cross-functional team to launch a new product line, contributing to a 15% increase
-            in overall company revenue.
+            Architected and implemented an automated data ingestion pipeline with advanced transformation capabilities, achieving $3M in operational savings.
+          </>,
+          <>
+            Introduced Infrastructure as Code (IaC) strategy using Terraform and Terragrunt to enable long-term scaling of client applications.
+          </>,
+        ],
+        images: [],
+      },
+      {
+        company: "CapitOx",
+        timeframe: "Oct 2020 - Aug 2021",
+        role: "Project Leader",
+        achievements: [
+          <>
+            Led team of 4 in extensive market analysis to identify European foreign markets for product expansion.
+          </>,
+          <>
+            Developed short and long-term pricing strategy for new financial savings product for FTSE100 Bank.
+          </>,
+        ],
+        images: [],
+      },
+      {
+        company: "Southern Nuclear",
+        timeframe: "Jun 2017 - Sep 2020",
+        role: "Nuclear Engineer (I, II, and III)",
+        achievements: [
+          <>
+            Automated routine operational processes using FORTRAN and Python, reducing costs by approximately $20,000 USD per year.
+          </>,
+          <>
+            Developed robust project management tools including custom Python libraries and VBA programs to decrease human performance errors and improve schedule adherence.
           </>,
         ],
         images: [],
@@ -155,12 +165,16 @@ const about: About = {
     title: "Studies",
     institutions: [
       {
-        name: "University of Jakarta",
-        description: <>Studied software engineering.</>,
+        name: "University of Oxford",
+        description: <>MBA (2020-2021)</>,
       },
       {
-        name: "Build the Future",
-        description: <>Studied online marketing and personal branding.</>,
+        name: "Georgia Institute of Technology",
+        description: <>MS Data Analytics (2018-2020)</>,
+      },
+      {
+        name: "Georgia Institute of Technology",
+        description: <>BS Nuclear & Radiological Engineering (2012-2017)</>,
       },
     ],
   },
@@ -169,61 +183,64 @@ const about: About = {
     title: "Technical skills",
     skills: [
       {
-        title: "Figma",
+        title: "Enterprise Architecture & Data Platforms",
         description: (
-          <>Able to prototype in Figma with Once UI with unnatural speed.</>
+          <>Designing scalable technical ecosystems and robust data systems that transform raw information into actionable business insights.</>
         ),
         tags: [
           {
-            name: "Figma",
-            icon: "figma",
-          },
-        ],
-        // optional: leave the array empty if you don't want to display images
-        images: [
-          {
-            src: "/images/projects/project-01/cover-02.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
+            name: "Data Architecture",
+            icon: "database",
           },
           {
-            src: "/images/projects/project-01/cover-03.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
+            name: "Azure",
+            icon: "azure",
+          },
+          {
+            name: "AWS",
+            icon: "aws",
           },
         ],
+        images: [],
       },
       {
-        title: "Next.js",
+        title: "Full-Stack Development & DevOps",
         description: (
-          <>Building next gen apps with Next.js + Once UI + Supabase.</>
+          <>Building modern applications with Next.js, Python, and cloud-native architectures. Implementing Infrastructure as Code with Terraform and CI/CD pipelines.</>
         ),
         tags: [
           {
-            name: "JavaScript",
-            icon: "javascript",
+            name: "Python",
+            icon: "python",
           },
           {
             name: "Next.js",
             icon: "nextjs",
           },
           {
-            name: "Supabase",
-            icon: "supabase",
+            name: "Docker",
+            icon: "docker",
           },
         ],
-        // optional: leave the array empty if you don't want to display images
-        images: [
+        images: [],
+      },
+      {
+        title: "AI/ML Implementation",
+        description: (
+          <>Pragmatic approaches to implementing artificial intelligence and machine learning in enterprise business contexts, with focus on LLMs and data-driven solutions.</>
+        ),
+        tags: [
           {
-            src: "/images/projects/project-01/cover-04.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
+            name: "Python",
+            icon: "python",
+          },
+          {
+            name: "AI/ML",
+            icon: "brain",
           },
         ],
-      },  
+        images: [],
+      },
     ],
   },
 };
